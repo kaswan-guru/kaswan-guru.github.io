@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gurufin FX-Adaptive vs. Uniswap vs. Curve Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --text-main: #1e293b;
+            --text-light: #64748b;
+            --bg-body: #f1f5f9;
+            --bg-card: #ffffff;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 380px;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+            box-shadow: 4px 0 15px -3px rgba(0, 0, 0, 0.05);
+            z-index: 20;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+        }
+
+        .sidebar-header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+            color: var(--primary-dark);
+        }
+
+        .sidebar-header p {
+            font-size: 13px;
+            color: var(--text-light);
+            margin: 8px 0 0 0;
+        }
+
+        .controls-container {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .control-section h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-light);
+            margin: 0 0 16px 0;
+            border-bottom: 2px solid var(--bg-body);
+            padding-bottom: 8px;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+
+        .input-wrapper input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            background: #fff;
+        }
+
+        .input-wrapper select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background-color: #f8fafc;
+            cursor: pointer;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-group input[type="range"] {
+            flex: 1;
+        }
+
+        .run-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            font-size: 15px;
+            transition: background 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.2);
+        }
+
+        .run-button:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Main Content Styles */
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+            background: var(--bg-main);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .result-row:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        .result-value {
+            font-weight: 600;
+            color: var(--text-main);
+            font-feature-settings: "tnum";
+        }
+
+        .result-value.highlight {
+            color: var(--primary);
+        }
+
+        .model-comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .model-comparison-table th {
+            text-align: left;
+            padding: 12px;
+            color: var(--text-light);
+            font-weight: 600;
+            font-size: 13px;
+            background: var(--bg-main);
+        }
+
+        .model-comparison-table td {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 14px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .model-pill {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pill-uniswap { background: #fee2e2; color: #991b1b; }
+        .pill-curve { background: #f0fdf4; color: #166534; }
+        .pill-gurufin { background: #e0e7ff; color: #3730a3; }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .alert-box {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h1>FX-AMM Simulator</h1>
+        <p>Compare Uniswap V2, Curve, and Gurufin FX-Adaptive</p>
+    </div>
+
+    <div class="controls-container">
+        
+        <div class="control-section">
+            <h3>Market Conditions</h3>
+            
+            <div class="input-group">
+                <label>Oracle Price (Mid Rate KRW/USD)</label>
+                <div class="input-wrapper">
+                    <input type="number" id="oraclePrice" value="1450" step="0.1" onchange="runSimulation()">
+                    <span style="position:absolute; right:12px; color:#94a3b8; font-size:12px;">KRW</span>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Trade Size (USD Value)</label>
+                <div class="input-wrapper">
+                    <input type="number" id="tradeSizeUSD" value="10000" step="1000" onchange="runSimulation()">
+                    <span style="position:absolute; right:12px; color:#94a3b8; font-size:12px;">$</span>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Direction</label>
+                <div class="input-wrapper">
+                    <select id="tradeDirection" onchange="runSimulation()">
+                        <option value="buy_krw">Buy KRW (Sell USD)</option>
+                        <option value="sell_krw">Sell KRW (Buy USD)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3>Pool Reserves</h3>
+
+            <div class="input-group">
+                <label>USD Reserves (USGX)</label>
+                <div class="input-wrapper">
+                    <input type="number" id="reservesUSD" value="10000000" onchange="runSimulation()">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>KRW Reserves (KRGX)</label>
+                <div class="input-wrapper">
+                    <input type="number" id="reservesKRW" value="14500000000" onchange="runSimulation()">
+                </div>
+                <small style="color: #64748b; font-size: 11px;">Current Pool Ratio: <span id="poolRatioDisplay">1450.00</span></small>
+            </div>
+             <button style="width:100%; padding: 8px; background: #f1f5f9; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:12px;" onclick="rebalancePool()">Reset Pool to Oracle Price</button>
+        </div>
+
+        <div class="control-section">
+            <h3>Gurufin Parameters</h3>
+            
+            <div class="input-group">
+                <label>A Max (Stable State)</label>
+                <input type="number" id="aMax" value="500" onchange="runSimulation()">
+            </div>
+            
+            <div class="input-group">
+                <label>A Min (Volatile State)</label>
+                <input type="number" id="aMin" value="10" onchange="runSimulation()">
+            </div>
+
+            <div class="input-group">
+                <label>Delta 0 (Sensitivity %)</label>
+                <input type="number" id="delta0" value="1.0" step="0.1" onchange="runSimulation()">
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <button class="run-button" style="background: #e2e8f0; color: #475569;" onclick="runSimulation()">Preview</button>
+            <button class="run-button" onclick="executeExchange()">Exchange</button>
+        </div>
+        <button style="width:100%; margin-top: 10px; padding: 10px; background: #fff; border:1px solid #cbd5e1; border-radius:10px; cursor:pointer; font-size:14px; color: #ef4444; font-weight: 600;" onclick="resetPool()">Reset Pool</button>
+    </div>
+</div>
+
+<div class="main-content">
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <span class="card-title">Execution Comparison</span>
+            <span style="font-size:12px; color:#64748b;">Assuming 0.05% Base Fee for all</span>
+        </div>
+        <table class="model-comparison-table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Output Amount</th>
+                    <th>Effective Rate</th>
+                    <th>Slippage</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="comparisonTableBody">
+                <!-- Javascript will populate this -->
+            </tbody>
+        </table>
+        <div id="guruAlert" class="alert-box alert-error"></div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Slippage vs Trade Size</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="slippageChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Dynamic A_eff (Gurufin)</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="aEffChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+         <div class="card-header">
+            <span class="card-title">Model Internals (Gurufin)</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">Pool Deviation (δ)</span>
+            <span class="result-value" id="debugDelta">--</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">Effective Amplification (A_eff)</span>
+            <span class="result-value" id="debugAeff">--</span>
+        </div>
+        <div class="result-row">
+            <span class="result-label">Virtual Price (Normalized)</span>
+            <span class="result-value" id="debugVPrice">--</span>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- Constants & Config ---
+    const FEE_TIER = 0.0005; // 5 bps
+
+    // --- Math Utilities ---
+    
+    // Uniswap V2: x * y = k
+    function getAmountOutUniswap(amountIn, reserveIn, reserveOut) {
+        if (amountIn <= 0) return 0;
+        const amountInWithFee = amountIn * (1 - FEE_TIER);
+        const numerator = amountInWithFee * reserveOut;
+        const denominator = reserveIn + amountInWithFee;
+        return numerator / denominator;
+    }
+
+    // Curve StableSwap Math
+    function getD(xp, A) {
+        const N_COINS = 2;
+        const S = xp[0] + xp[1];
+        if (S === 0) return 0;
+
+        let Dprev = 0;
+        let D = S;
+        const Ann = A * N_COINS;
+
+        for (let i = 0; i < 255; i++) {
+            let D_P = D;
+            D_P = (D_P * D) / (xp[0] * N_COINS);
+            D_P = (D_P * D) / (xp[1] * N_COINS);
+            
+            Dprev = D;
+            const numerator = (Ann * S + D_P * N_COINS) * D;
+            const denominator = (Ann - 1) * D + (N_COINS + 1) * D_P;
+            D = numerator / denominator;
+            
+            if (Math.abs(D - Dprev) <= 1) return D;
+        }
+        return D;
+    }
+
+    function getY(i, j, x, xp, A) {
+        // x: new balance of coin i
+        // Calculating y: new balance of coin j
+        const N_COINS = 2;
+        const D = getD(xp, A);
+        const Ann = A * N_COINS;
+        let c = D;
+        let S = 0;
+        let _x = 0;
+        let y_prev = 0;
+        let y = D;
+
+        // For 2 coins, if i=0 (input), we know x[0] is new x. 
+        // We calculate x[1] (which is y).
+        
+        c = (c * D) / (x * N_COINS); 
+        c = (c * D) / (N_COINS * Ann);
+        
+        const b = x + D / Ann;
+        
+        for (let k = 0; k < 255; k++) {
+            y_prev = y;
+            y = (y * y + c) / (2 * y + b - D);
+            if (Math.abs(y - y_prev) <= 1) return y;
+        }
+        return y;
+    }
+
+    // --- Improved Curve FX Implementation (Normalized for Fairness) ---
+
+    // Core StableSwap Math (Raw 1:1 values)
+    function getAmountOutCurveRaw(dx, x, y, A, fee) {
+        // x, y, dx must be in comparable "1:1" units
+        const xp = [x, y];
+        const new_x = x + dx;
+        const new_y = getY(0, 1, new_x, xp, A);
+        const dy = y - new_y;
+        return dy * (1 - fee);
+    }
+    // Wrapper to apply FX Normalization to standard Curve (Fixed A)
+    // This allows fair comparison by giving Curve the "benefit" of the oracle peg
+    function getAmountOutCurveFX(amountInRaw, reserveInRaw, reserveOutRaw, p0, A_fixed, isInputKRW) {
+        const sqrtP0 = Math.sqrt(p0);
+        let rInNorm, rOutNorm, dInNorm;
+        // Apply exactly the same Virtual Liquidity transform as Gurufin
+        // This puts the pool in a "1:1" state relative to the Oracle Price
+        if (isInputKRW) {
+            // KRW -> USD
+            rInNorm = reserveInRaw / sqrtP0;
+            rOutNorm = reserveOutRaw * sqrtP0;
+            dInNorm = amountInRaw / sqrtP0;
+        } else {
+            // USD -> KRW
+            rInNorm = reserveInRaw * sqrtP0;
+            rOutNorm = reserveOutRaw / sqrtP0;
+            dInNorm = amountInRaw * sqrtP0;
+        }
+        // Run Standard Curve Math with FIXED A
+        const dOutNorm = getAmountOutCurveRaw(dInNorm, rInNorm, rOutNorm, A_fixed, FEE_TIER);
+        // Denormalize
+        let amountOutRaw;
+        if (isInputKRW) {
+            // Output is USD
+            amountOutRaw = dOutNorm / sqrtP0;
+        } else {
+            // Output is KRW
+            amountOutRaw = dOutNorm * sqrtP0;
+        }
+        return amountOutRaw;
+    }
+    // Updated Gurufin logic (Explicit Separation)
+    function getAmountOutGurufin(amountInRaw, reserveInRaw, reserveOutRaw, p0, A_max, A_min, delta0_percent, isInputKRW) {
+        const sqrtP0 = Math.sqrt(p0);
+        let rInNorm, rOutNorm, dInNorm;
+        // Apply exactly the same Virtual Liquidity transform as Gurufin
+        // This puts the pool in a "1:1" state relative to the Oracle Price
+        if (isInputKRW) {
+            // KRW -> USD
+            rInNorm = reserveInRaw / sqrtP0;
+            rOutNorm = reserveOutRaw * sqrtP0;
+            dInNorm = amountInRaw / sqrtP0;
+        } else {
+            rInNorm = reserveInRaw * sqrtP0;
+            rOutNorm = reserveOutRaw / sqrtP0;
+            dInNorm = amountInRaw * sqrtP0;
+        }
+        // Calculate Pool Condition for Dynamic A
+        let realKRW = isInputKRW ? reserveInRaw : reserveOutRaw;
+        let realUSD = isInputKRW ? reserveOutRaw : reserveInRaw;
+        let poolPrice = realKRW / realUSD;
+        const delta = Math.abs(Math.log(poolPrice / p0));
+        const d0_val = delta0_percent / 100;
+        // Dynamic A Calculation
+        const A_eff = A_min + (A_max - A_min) * Math.exp( - Math.pow(delta / d0_val, 2) );
+        // Run Curve Math with DYNAMIC A
+        const dOutNorm = getAmountOutCurveRaw(dInNorm, rInNorm, rOutNorm, A_eff, FEE_TIER);
+        let amountOutRaw;
+        if (isInputKRW) {
+            amountOutRaw = dOutNorm / sqrtP0;
+        } else {
+            amountOutRaw = dOutNorm * sqrtP0;
+        }
+        return {
+            amountOut: amountOutRaw,
+            aEff: A_eff,
+            delta: delta,
+            blocked: delta > 0.02,
+            debugNormRatio: rInNorm / rOutNorm
+        };
+    }
+
+    // --- UI Integration ---
+    var slippageChartInstance = null;
+    var aEffChartInstance = null;
+
+    function initCharts() {
+        const ctxSlippage = document.getElementById('slippageChart').getContext('2d');
+        slippageChartInstance = new Chart(ctxSlippage, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Trade Size (USD)' } },
+                    y: { title: { display: true, text: 'Slippage (%)' } }
+                }
+            }
+        });
+
+        const ctxAeff = document.getElementById('aEffChart').getContext('2d');
+        aEffChartInstance = new Chart(ctxAeff, {
+            type: 'line',
+            data: { datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: { display: true, text: 'Price Deviation %' }
+                    },
+                    y: { title: { display: true, text: 'Amplification (A)' } }
+                }
+            }
+        });
+    }
+
+    function rebalancePool() {
+        // Reset pool to oracle price perfection
+        const p0 = parseFloat(document.getElementById('oraclePrice').value);
+        const resUSD = parseFloat(document.getElementById('reservesUSD').value);
+
+        document.getElementById('reservesKRW').value = (resUSD * p0).toFixed(2);
+        runSimulation();
+    }
+
+    function resetPool() {
+        // Reset to initial default values
+        document.getElementById('reservesUSD').value = "10000000";
+        document.getElementById('oraclePrice').value = "1450";
+        rebalancePool();
+    }
+
+    function executeExchange() {
+        // 1. Gather Inputs
+        const p0 = parseFloat(document.getElementById('oraclePrice').value);
+        const tradeSizeUSD = parseFloat(document.getElementById('tradeSizeUSD').value);
+        const direction = document.getElementById('tradeDirection').value;
+        let resUSD = parseFloat(document.getElementById('reservesUSD').value);
+        let resKRW = parseFloat(document.getElementById('reservesKRW').value);
+
+        const aMax = parseFloat(document.getElementById('aMax').value);
+        const aMin = parseFloat(document.getElementById('aMin').value);
+        const delta0 = parseFloat(document.getElementById('delta0').value);
+
+        // Determine In/Out Reserves & Amounts for calculation
+        let amtIn;
+        let isBuyKRW = direction === 'buy_krw'; // User sends USD, Gets KRW
+
+        if (isBuyKRW) {
+            // In: USD, Out: KRW
+            amtIn = tradeSizeUSD; // input is USD
+        } else {
+             // In: KRW, Out: USD
+             // tradeSize is in USD value, we need to determine actual KRW input amount.
+             // Usually simulators treat "Trade Size" input as the amount being sold.
+             // If the label says "Trade Size (USD Value)", and we are Selling KRW,
+             // we usually imply we are selling X USD worth of KRW.
+             // Let's use the oracle price to determine the KRW input amount roughly,
+             // or strictly follow logic: Input Amount = TradeSizeUSD * OraclePrice.
+             amtIn = tradeSizeUSD * p0;
+        }
+
+        let isInputKRW = !isBuyKRW;
+
+        // Calculate functionality using Gurufin Logic
+        const reserveIn = isBuyKRW ? resUSD : resKRW;
+        const reserveOut = isBuyKRW ? resKRW : resUSD;
+
+        const result = getAmountOutGurufin(amtIn, reserveIn, reserveOut, p0, aMax, aMin, delta0, isInputKRW);
+
+        if (result.blocked) {
+            alert("Trade Blocked: Deviation too high (RFQ Mode)");
+            return;
+        }
+
+        const amountOut = result.amountOut;
+
+        // Apply Execution
+        if (isBuyKRW) {
+            // User sent USD (amtIn), Pool gets USD.
+            // User gets KRW (amountOut), Pool loses KRW.
+            resUSD += amtIn;
+            resKRW -= amountOut;
+        } else {
+            // User sent KRW (amtIn), Pool gets KRW.
+            // User gets USD (amountOut), Pool loses USD.
+            resKRW += amtIn;
+            resUSD -= amountOut;
+        }
+
+        // Update DOM
+        document.getElementById('reservesUSD').value = resUSD.toFixed(2);
+        document.getElementById('reservesKRW').value = resKRW.toFixed(2);
+
+        // Provide Visual Feedback?
+
+        // Render
+        runSimulation();
+    }
+
+    function runSimulation() {
+        // 1. Gather Inputs
+        const p0 = parseFloat(document.getElementById('oraclePrice').value);
+        const tradeSizeUSD = parseFloat(document.getElementById('tradeSizeUSD').value);
+        const direction = document.getElementById('tradeDirection').value;
+        const resUSD = parseFloat(document.getElementById('reservesUSD').value);
+        const resKRW = parseFloat(document.getElementById('reservesKRW').value);
+        
+        const aMax = parseFloat(document.getElementById('aMax').value);
+        const aMin = parseFloat(document.getElementById('aMin').value);
+        const delta0 = parseFloat(document.getElementById('delta0').value);
+
+        // Update Pool Ratio Display
+        const currentRatio = resKRW / resUSD;
+        document.getElementById('poolRatioDisplay').textContent = currentRatio.toFixed(2);
+
+        // Determine In/Out Reserves & Amounts for calculation
+        let rIn, rOut, amtIn;
+        let isBuyKRW = direction === 'buy_krw'; // User sends USD, Gets KRW
+        
+        if (isBuyKRW) {
+            // In: USD, Out: KRW
+            rIn = resUSD;
+            rOut = resKRW;
+            amtIn = tradeSizeUSD;
+        } else {
+             // In: KRW, Out: USD
+             // tradeSize is in USD, convert to KRW for input
+             // Ideally we use Oracle execution price for estimation or just pure Oracle
+             amtIn = tradeSizeUSD * p0; 
+             rIn = resKRW;
+             rOut = resUSD;
+        }
+
+        // --- Calculate Models ---
+
+        // --- Calculate Models ---
+        let isInputKRW = !isBuyKRW;
+
+        // 1. Uniswap V2
+        const outUni = getAmountOutUniswap(amtIn, rIn, rOut);
+
+        // 2. Curve (Static A=200 for "Stable" reference)
+        // Now using FX-Normalized version for fair comparison
+        const outCurve = getAmountOutCurveFX(amtIn, rIn, rOut, p0, 200, isInputKRW);
+
+        // 3. Gurufin
+        const guruResult = getAmountOutGurufin(amtIn, rIn, rOut, p0, aMax, aMin, delta0, isInputKRW);
+        const outGuru = guruResult.amountOut;
+
+        // --- Metrics Calculation ---
+        
+        // Oracle Expected Output (mid-market, no fee)
+        const valInUSD = isBuyKRW ? amtIn : (amtIn / p0);
+        const oracleOut = isBuyKRW ? (amtIn * p0) : (amtIn / p0);
+
+        function calcMetrics(output, name, blocked=false) {
+            const slippage = (1 - (output / oracleOut)) * 100; // vs Oracle Mid
+            const effectiveRate = isBuyKRW ? (output / amtIn) : (amtIn / output);
+            // Note: For Sell KRW, Rate = InputKRW / OutputUSD
+
+            return {
+                out: output,
+                rate: effectiveRate,
+                slip: slippage,
+                status: blocked ? 'BLOCKED' : 'OK'
+            };
+        }
+
+        const mUni = calcMetrics(outUni, 'Uniswap');
+        const mCurve = calcMetrics(outCurve, 'Curve');
+        const mGuru = calcMetrics(outGuru, 'Gurufin', guruResult.blocked);
+
+        // --- Update UI Table ---
+        const tbody = document.getElementById('comparisonTableBody');
+        tbody.innerHTML = '';
+
+        const rows = [
+            { name: 'Uniswap V2', res: mUni, cls: 'pill-uniswap' },
+            { name: 'Curve (A=200)', res: mCurve, cls: 'pill-curve' },
+            { name: 'Gurufin FX', res: mGuru, cls: 'pill-gurufin' }
+        ];
+
+        rows.forEach(r => {
+            const tr = document.createElement('tr');
+
+            // Format Output
+            let outFmt = r.res.out.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            let rateFmt = r.res.rate.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            let slipFmt = r.res.slip.toFixed(4) + '%';
+
+            let statusClass = r.res.status === 'BLOCKED' ? 'style="color: #ef4444; font-weight: bold;"' : '';
+            if (r.res.status === 'BLOCKED') {
+                 // Add warning icon or similar if needed, but color is requested
+            }
+
+            tr.innerHTML = `
+                <td><span class="model-pill ${r.cls}">${r.name}</span></td>
+                <td class="result-value" ${statusClass}>${outFmt}</td>
+                <td ${statusClass}>${rateFmt}</td>
+                <td class="${r.res.slip > 1 ? 'text-red-500' : ''}" ${statusClass}>${slipFmt}</td>
+                <td ${statusClass}>${r.res.status}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Debug Panels
+        const debugDeltaLabel = document.getElementById('debugDelta');
+        debugDeltaLabel.textContent = (guruResult.delta * 100).toFixed(4) + '%';
+        if (guruResult.blocked) {
+            debugDeltaLabel.style.color = '#ef4444';
+            debugDeltaLabel.style.fontWeight = 'bold';
+        } else {
+            debugDeltaLabel.style.color = '';
+            debugDeltaLabel.style.fontWeight = '';
+        }
+
+        document.getElementById('debugAeff').textContent = guruResult.aEff.toFixed(2);
+        document.getElementById('debugVPrice').textContent = "1.0000"; // Normalized target
+
+        const alertBox = document.getElementById('guruAlert');
+        if (guruResult.blocked) {
+            alertBox.style.display = 'block';
+            alertBox.textContent = "⚠️ Gurufin Protocol Halted: Deviation > 2%. RFQ Mode Only.";
+        } else {
+            alertBox.style.display = 'none';
+        }
+
+        updateCharts(rIn, rOut, p0, aMax, aMin, delta0, isBuyKRW, guruResult);
+    }
+
+    function updateCharts(rIn, rOut, p0, aMax, aMin, delta0, isBuyKRW, guruResult) {
+        if (!slippageChartInstance || !aEffChartInstance) return;
+
+        // 1. Slippage Curve Generation
+        const points = 20;
+        const maxTrade = parseFloat(document.getElementById('tradeSizeUSD').value) * 5; // Chart up to 5x current trade
+        const step = maxTrade / points;
+        
+        const dataUni = [];
+        const dataCurve = [];
+        const dataGuru = [];
+        const labels = [];
+
+        for (let i = 1; i <= points; i++) {
+            const sizeUSD = step * i;
+            labels.push((sizeUSD/1000).toFixed(0) + 'k');
+            
+            // Calculate inputs based on direction
+            let tAmtIn;
+            if (isBuyKRW) { tAmtIn = sizeUSD; }
+            else { tAmtIn = sizeUSD * p0; }
+
+            const oracleOut = isBuyKRW ? (tAmtIn * p0) : (tAmtIn / p0);
+
+            // Determine input type for this iteration constant with main direction
+            let iterIsInputKRW = !isBuyKRW;
+
+            // Uni
+            const oUni = getAmountOutUniswap(tAmtIn, rIn, rOut);
+            dataUni.push( (1 - oUni/oracleOut)*100 );
+
+            // Curve
+            const oCurve = getAmountOutCurveFX(tAmtIn, rIn, rOut, p0, 200, iterIsInputKRW);
+            dataCurve.push( (1 - oCurve/oracleOut)*100 );
+
+            // Guru
+            const resG = getAmountOutGurufin(tAmtIn, rIn, rOut, p0, aMax, aMin, delta0, iterIsInputKRW);
+            // Always push data even if blocked
+            dataGuru.push( (1 - resG.amountOut/oracleOut)*100 );
+        }
+
+        slippageChartInstance.data = {
+            labels: labels,
+            datasets: [
+                { label: 'Uniswap V2', data: dataUni, borderColor: '#ef4444', tension: 0.4 },
+                { label: 'Curve (A=200)', data: dataCurve, borderColor: '#10b981', tension: 0.4 },
+                { label: 'Gurufin', data: dataGuru, borderColor: '#6366f1', tension: 0.4, borderWidth: 3 }
+            ]
+        };
+        slippageChartInstance.update();
+
+
+        // 2. A_eff Curve Generation
+        // Plot A vs Deviation
+        const dData = [];
+        const devSteps = 200; // 0 to 3.0%
+        for(let i=0; i<devSteps; i++) {
+             const dev = (i / devSteps) * 3.0; // 0 to 3%
+             const d0_val = delta0 / 100;
+             const val = aMin + (aMax - aMin) * Math.exp( - Math.pow( (dev/100) / d0_val, 2) );
+             // Push {x, y} for linear scale compatibility
+             dData.push({ x: dev, y: val });
+        }
+
+        const currentDeltaPercent = guruResult.delta * 100;
+        const currentAeff = guruResult.aEff;
+
+        aEffChartInstance.data = {
+             // labels: dLabels, // Removed labels for linear scale using scatter/line x/y
+             datasets: [
+                {
+                 label: 'Amplification (A)',
+                 type: 'line',
+                 data: dData,
+                 borderColor: '#6366f1',
+                 fill: true,
+                 backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                 pointRadius: 0, // Hide points on the curve for smoothness
+                 order: 2
+                },
+                {
+                 label: 'Current State',
+                 type: 'scatter',
+                 data: [{
+                    x: currentDeltaPercent,
+                    y: currentAeff
+                 }],
+                 backgroundColor: '#ef4444',
+                 borderColor: '#ef4444',
+                 pointRadius: 6,
+                 pointHoverRadius: 8,
+                 order: 1
+                }
+            ]
+        };
+        aEffChartInstance.update();
+
+    }
+
+    // Initialize
+    window.onload = function() {
+        initCharts();
+        runSimulation();
+    };
+
+</script>
+</body>
+</html>
