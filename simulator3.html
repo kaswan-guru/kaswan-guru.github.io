@@ -1068,12 +1068,13 @@
         if (ilChartInstance) {
             const ilDataUni = [];
             const ilDataGuru = [];
+            const ilDataCurve = [];
             const ilLabels = [];
 
             // Simulation params
             const simD = 1000000; // Arbitrary D for simulation (normalized)
             const steps = 40;
-            const range = 0.2; // +/- 20%
+            const range = 0.02; // +/- 2%
 
             for (let i = 0; i <= steps; i++) {
                 const pct = -range + (2 * range * i / steps);
@@ -1104,6 +1105,11 @@
                 let x_end = solveValForPrice(r, simD, A_sim);
                 let y_end = getYFromD(x_end, simD, A_sim);
 
+                // Curve (A=200)
+                const A_curve = 200;
+                let x_end_curve = solveValForPrice(r, simD, A_curve);
+                let y_end_curve = getYFromD(x_end_curve, simD, A_curve);
+
                 // 3. Calculate Values
                 // Normalized Initial: x=D/2, y=D/2. Price=1?
                 // Wait, if Price=1, Value = D/2 * 1 + D/2 = D.
@@ -1115,16 +1121,20 @@
 
                 const vHold = (simD/2) * r + (simD/2);
                 const vPool = x_end * r + y_end;
+                const vPoolCurve = x_end_curve * r + y_end_curve;
 
                 const ilGuru = ((vPool - vHold) / vHold) * 100;
+                const ilCurve = ((vPoolCurve - vHold) / vHold) * 100;
 
                 ilDataUni.push({ x: pct * 100, y: ilUni });
                 ilDataGuru.push({ x: pct * 100, y: ilGuru });
+                ilDataCurve.push({ x: pct * 100, y: ilCurve });
             }
 
             ilChartInstance.data = {
                 datasets: [
                     { label: 'Uniswap V2', data: ilDataUni, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Curve (A=200)', data: ilDataCurve, borderColor: '#10b981', borderWidth: 2, pointRadius: 0 },
                     { label: 'Gurufin Dynamic', data: ilDataGuru, borderColor: '#6366f1', borderWidth: 3, pointRadius: 0 }
                 ]
             };
