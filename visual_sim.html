@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FX-Adaptive AMM Visual Simulator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --border: #e2e8f0;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 400px;
+      background: var(--card-bg);
+      border-right: 1px solid var(--border);
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+      z-index: 10;
+    }
+    .main-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 20px; color: var(--primary); margin-bottom: 10px; }
+    h2 { font-size: 16px; margin-bottom: 12px; border-bottom: 2px solid var(--bg); padding-bottom: 8px; }
+    
+    .control-group {
+      margin-bottom: 16px;
+    }
+    .control-group label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #64748b;
+    }
+    .control-group input[type="number"], .control-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .control-group input[type="number"]:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+    
+    .slider-container {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .slider-container input[type="range"] {
+      flex: 1;
+      accent-color: var(--primary);
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .stat-card .label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+    .stat-card .value { font-size: 18px; font-weight: 600; color: var(--text); }
+    .stat-card .sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    
+    .chart-container {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      flex: 1;
+      min-height: 400px;
+      position: relative;
+    }
+    
+    button.run-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    button.run-btn:hover { background: var(--primary-hover); }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag.ok { background: #dcfce7; color: #166534; }
+    .tag.warn { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div>
+    <h1>FX-Adaptive AMM</h1>
+    <p style="font-size: 12px; color: #64748b;">Visual Simulator for StableSwap + Dynamic A + Dynamic Fee</p>
+  </div>
+
+  <form id="simForm" onsubmit="event.preventDefault(); updateSim();">
+    <!-- Market State -->
+    <div>
+      <h2>Market Regime</h2>
+      <div class="control-group">
+        <label>Volatility σ <span id="val_sigma">0.01</span></label>
+        <div class="slider-container">
+          <input id="sigma_slider" type="range" min="0" max="0.2" step="0.001" value="0.01" oninput="syncInput('sigma', this.value)" />
+          <input id="sigma" type="number" step="0.001" value="0.01" style="width: 80px;" oninput="syncInput('sigma_slider', this.value)" />
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div style="margin-top: 20px;">
+        <button class="run-btn" onclick="applyTrade()">Apply Trade & Update Pool</button>
+        <button class="run-btn" onclick="resetPool()" style="background: #64748b; margin-top: 8px;">Reset Pool</button>
+      </div>
+      <div class="control-group">
+        <label>Oracle Price (KRGX/USGX)</label>
+        <input id="poracle" type="number" step="any" value="1405" onchange="updateSim()" />
+      </div>
+    </div>
+
+    <!-- Pool State -->
+    <div>
+      <h2>Pool Liquidity</h2>
+      <div class="control-group">
+        <label>USGX Balance (x)</label>
+        <input id="x" type="number" step="any" value="10000" onchange="updateSim()" />
+      </div>
+      <div class="control-group">
+        <label>KRGX Balance (y)</label>
+        <input id="y" type="number" step="any" value="14000000" onchange="updateSim()" />
+      </div>
+      <div class="control-group">
+        <label>Peg p₀ (Initial Rate)</label>
+        <input id="p0" type="number" step="any" value="1400" onchange="updateSim()" />
+      </div>
+    </div>
+
+    <!-- Trade -->
+    <div>
+      <h2>Trade Simulation</h2>
+      <div class="control-group">
+        <label>Direction</label>
+        <select id="direction" onchange="updateSim()">
+          <option value="USGX_TO_KRGX">Sell USGX -> Buy KRGX</option>
+          <option value="KRGX_TO_USGX">Sell KRGX -> Buy USGX</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Amount In</label>
+        <input id="amountIn" type="number" step="any" value="100" onchange="updateSim()" />
+      </div>
+    </div>
+
+    <!-- Advanced Params Details (Collapsible or just list) -->
+    <details>
+      <summary style="font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b;">Advanced Config (A / Fees)</summary>
+      <div style="margin-top: 10px;">
+        <div class="control-group">
+            <label>A_max</label><input id="amax" type="number" value="4000" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>A_min</label><input id="amin" type="number" value="500" onchange="updateSim()">
+        </div>
+         <div class="control-group">
+            <label>sigma_th</label><input id="sigmaTh" type="number" value="0.01" step="0.001" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>beta</label><input id="beta" type="number" value="50" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>fee_base (0.0015 = 0.15%)</label><input id="feeBase" type="number" value="0.0015" step="0.0001" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>fee_max (0.01 = 1%)</label><input id="feeMax" type="number" value="0.01" step="0.001" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>kappa (Fee Sensitivity)</label><input id="kappa" type="number" value="50" onchange="updateSim()">
+        </div>
+        <div class="control-group">
+            <label>band_bps (200 = 2%)</label><input id="bandBps" type="number" value="200" onchange="updateSim()">
+        </div>
+      </div>
+    </details>
+    
+    <button class="run-btn" onclick="updateSim()">Recalculate</button>
+  </form>
+</div>
+
+<div class="main-content">
+  <!-- Key Metrics -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="label">Amplification A_eff</div>
+      <div class="value" id="res_aeff">--</div>
+      <div class="sub" id="res_regime">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Dynamic Fee</div>
+      <div class="value" id="res_fee">--%</div>
+      <div class="sub" id="res_fee_amt">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Execution Price</div>
+      <div class="value" id="res_price">--</div>
+      <div class="sub" id="res_slippage">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Band Status</div>
+      <div class="value" id="res_band_status">--</div>
+      <div class="sub" id="res_deviation">--</div>
+    </div>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="bondingCurveChart"></canvas>
+  </div>
+  
+  <div class="stat-card">
+    <div class="label">Detailed Output</div>
+    <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap; margin-top: 8px;" id="console_output"></div>
+  </div>
+</div>
+
+<script>
+    // --- Chart Global ---
+    let myChart = null;
+    let nextState = { x: 0, y: 0 };
+    const initialState = { x: 10000, y: 14000000 };
+
+    // --- Math Functions (Ported from main.html) ---
+    function parseNum(id) {
+      const el = document.getElementById(id);
+      if(!el) return 0;
+      const v = el.value.replace(/_/g, "");
+      const n = Number(v);
+      return isFinite(n) ? n : 0;
+    }
+
+    function syncInput(targetId, val) {
+      document.getElementById(targetId).value = val;
+      if(targetId === 'sigma') document.getElementById('val_sigma').innerText = val;
+      if(targetId === 'sigma_slider') document.getElementById('val_sigma').innerText = val;
+      updateSim();
+    }
+
+    function computeAeff(sigma, Amax, Amin, sigmaTh, beta) {
+      if (sigma <= sigmaTh) return Amax;
+      const denom = 1 + beta * (sigma - sigmaTh);
+      const val = Amax / denom;
+      return Math.max(Amin, val);
+    }
+
+    function computeFeeTotal(delta, feeBase, feeMax, kappa) {
+      const extra = kappa * delta;
+      const capped = Math.min(feeMax - feeBase, extra);
+      return feeBase + Math.max(0, capped);
+    }
+
+    function getD(A, xp) {
+      const n = 2;
+      let S = xp[0] + xp[1];
+      if (S === 0) return 0;
+      let D = S;
+      const Ann = A * n;
+      for (let i = 0; i < 256; i++) {
+        let D_P = D;
+        D_P = (D_P * D) / (xp[0] * n);
+        D_P = (D_P * D) / (xp[1] * n);
+        const D_prev = D;
+        D = ((Ann * S + 2 * D_P) * D) / ((Ann - 1) * D + 3 * D_P);
+        if (Math.abs(D - D_prev) <= 1e-9) break;
+      }
+      return D;
+    }
+
+    function getY(i, j, x, xp, A, D) {
+      const n = 2;
+      const Ann = A * n;
+      let c = D;
+      let S_ = 0;
+      for (let k = 0; k < n; k++) {
+        if (k === j) continue;
+        let _x = (k === i) ? x : xp[k];
+        S_ += _x;
+        c = (c * D) / (_x * n);
+      }
+      c = (c * D) / (Ann * n);
+      let b = S_ + D / Ann;
+      let yPrev = 0;
+      let y = D;
+      for (let iter = 0; iter < 256; iter++) {
+        yPrev = y;
+        y = (y * y + c) / (2 * y + b - D);
+        if (Math.abs(y - yPrev) <= 1e-9) break;
+      }
+      return y;
+    }
+
+    function stableswapTrade(xp, A, iIn, jOut, dxNet) {
+        // Original D
+        const D = getD(A, xp);
+        // New x
+        const newX = xp[iIn] + dxNet;
+        // Solve y
+        const newY = getY(iIn, jOut, newX, xp, A, D);
+        
+        // dy
+        const dy = xp[jOut] - newY;
+        
+        // Mutate for final state
+        xp[iIn] = newX;
+        xp[jOut] = newY;
+        return dy;
+    }
+
+    // --- Core Sim Logic ---
+
+    function updateSim() {
+        // 1. Inputs
+        const x = parseNum("x");
+        const y = parseNum("y");
+        const p0 = parseNum("p0");
+        const poracle = parseNum("poracle");
+        const sigma = parseNum("sigma");
+        const amax = parseNum("amax");
+        const amin = parseNum("amin");
+        const sigmaTh = parseNum("sigmaTh");
+        const beta = parseNum("beta");
+        const feeBase = parseNum("feeBase");
+        const feeMax = parseNum("feeMax");
+        const kappa = parseNum("kappa");
+        const bandBps = parseNum("bandBps");
+        const amountIn = parseNum("amountIn");
+        const direction = document.getElementById("direction").value;
+
+        // 2. Pre-calc
+        const Aeff = computeAeff(sigma, amax, amin, sigmaTh, beta);
+        const pPoolBefore = y / x;
+        const deltaBefore = Math.abs(pPoolBefore - poracle) / poracle;
+        
+        // Fee
+        const feeRate = computeFeeTotal(deltaBefore, feeBase, feeMax, kappa);
+        const bandViolated = (deltaBefore * 10000) > bandBps;
+
+        // 3. Trade Execution (Logic Copy)
+        const sqrtP0 = Math.sqrt(p0);
+        let u = x * sqrtP0;
+        let v = y / sqrtP0;
+        
+        let iIn, jOut, tokenOutName;
+        if(direction === "USGX_TO_KRGX") {
+            iIn = 0; jOut = 1; tokenOutName = "KRGX";
+        } else {
+            iIn = 1; jOut = 0; tokenOutName = "USGX";
+        }
+
+        const feeAmount = amountIn * feeRate;
+        const dxNet = amountIn - feeAmount;
+
+        let dxNetNorm;
+        if(iIn === 0) dxNetNorm = dxNet * sqrtP0;
+        else dxNetNorm = dxNet / sqrtP0;
+
+        const xp = [u, v];
+        const dyNorm = stableswapTrade(xp, Aeff, iIn, jOut, dxNetNorm);
+
+        // Denormalize results
+        const uFinal = xp[0];
+        const vFinal = xp[1];
+        const xFinal = uFinal / sqrtP0;
+        const yFinal = vFinal * sqrtP0;
+
+        // Store for execution
+        nextState.x = xFinal;
+        nextState.y = yFinal;
+
+        let amountOut;
+        if(jOut === 0) amountOut = dyNorm / sqrtP0;
+        else amountOut = dyNorm * sqrtP0;
+
+        const effectivePrice = (direction === "USGX_TO_KRGX")
+            ? (amountOut / amountIn)
+            : (amountIn / amountOut); // Always quote KRGX/USGX ish
+
+        const slippage = (Math.abs(effectivePrice - poracle) / poracle) * 100;
+
+        // 4. Update UI Metrics
+        document.getElementById('res_aeff').innerText = Aeff.toFixed(0);
+        document.getElementById('res_regime').innerText = (sigma <= sigmaTh) ? "Calm Regime" : "Volatile Regime";
+
+        document.getElementById('res_fee').innerText = (feeRate * 100).toFixed(4) + "%";
+        document.getElementById('res_fee_amt').innerText = "Fee: " + feeAmount.toFixed(4);
+
+        document.getElementById('res_price').innerText = effectivePrice.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        document.getElementById('res_slippage').innerText = "Slippage: " + slippage.toFixed(4) + "%";
+
+        const bandEl = document.getElementById('res_band_status');
+        if(bandViolated) {
+             bandEl.innerHTML = "<span class='tag warn'>BAND VIOLATED</span>";
+        } else {
+             bandEl.innerHTML = "<span class='tag ok'>INSIDE BAND</span>";
+        }
+        document.getElementById('res_deviation').innerText = "Dev: " + (deltaBefore*100).toFixed(5) + "%";
+
+        // Console Text
+        const cOut = `
+Trade: ${amountIn} (${direction})
+-----------------------------
+A_eff: ${Aeff.toFixed(2)} (sigma=${sigma})
+Fee: ${(feeRate*100).toFixed(4)}% (Amount: ${feeAmount.toFixed(4)})
+Pool Price (Before): ${pPoolBefore.toFixed(4)}
+Pool Price (After): ${(yFinal/xFinal).toFixed(4)}
+Deviation (Before): ${(deltaBefore*100).toFixed(4)}%
+-----------------------------
+Output: ${amountOut.toFixed(6)} ${tokenOutName}
+Balances:
+  USGX: ${x.toFixed(2)} -> ${xFinal.toFixed(2)}
+  KRGX: ${y.toFixed(2)} -> ${yFinal.toFixed(2)}
+        `;
+        document.getElementById('console_output').innerText = cOut;
+
+        // 5. Update Chart
+        updateChart(x, y, p0, Aeff, poracle);
+    }
+
+    function updateChart(currX, currY, p0, A, poracle) {
+
+        const sqrtP0 = Math.sqrt(p0);
+        const currU = currX * sqrtP0;
+        const currV = currY / sqrtP0;
+        const xp = [currU, currV];
+        const D = getD(A, xp);
+
+
+
+        const k_constProd = currX * currY;
+
+
+
+        const sum_norm = currU + currV;
+
+        const pointsStable = [];
+        const pointsUniswap = [];
+        const pointsLinear = [];
+
+
+
+        const startX = currX * 0.1;
+        const endX = currX * 3.0;
+        const steps = 100;
+        const stepSize = (endX - startX) / steps;
+
+        for(let i=0; i<=steps; i++) {
+            const plotX = startX + (i * stepSize);
+
+
+            const plotU = plotX * sqrtP0;
+
+            let plotV = getY(0, 1, plotU, xp, A, D);
+
+            let plotY_Stable = plotV * sqrtP0;
+            pointsStable.push({x: plotX, y: plotY_Stable});
+
+
+            let plotY_Uni = k_constProd / plotX;
+            pointsUniswap.push({x: plotX, y: plotY_Uni});
+
+
+
+            let plotV_Lin = sum_norm - plotU;
+            let plotY_Lin = (plotV_Lin > 0) ? (plotV_Lin * sqrtP0) : 0;
+
+            if(plotY_Lin >= 0) {
+                pointsLinear.push({x: plotX, y: plotY_Lin});
+            }
+        }
+
+        if(myChart) {
+            myChart.data.datasets[0].label = 'StableSwap (A=' + A.toFixed(0) + ')';
+            myChart.data.datasets[0].data = pointsStable;
+
+            myChart.data.datasets[1].data = [
+                 {x: startX, y: startX * poracle},
+                 {x: endX, y: endX * poracle}
+            ];
+
+
+            myChart.data.datasets[2].data = [{x: currX, y: currY}];
+
+
+            myChart.data.datasets[3].data = pointsUniswap;
+            myChart.data.datasets[4].data = pointsLinear;
+
+            myChart.update();
+        } else {
+             const ctx = document.getElementById('bondingCurveChart').getContext('2d');
+             myChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'StableSwap (Current)',
+                            data: pointsStable,
+                            borderColor: '#2563eb',
+                            borderWidth: 3,
+                            showLine: true,
+                            pointRadius: 0,
+                            fill: false,
+                            order: 1
+                        },
+                        {
+                            label: 'Oracle Price',
+                            data: [
+                                {x: startX, y: startX * poracle},
+                                {x: endX, y: endX * poracle}
+                            ],
+                            borderColor: '#94a3b8',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                            order: 5
+                        },
+                        {
+                            label: 'Current Position',
+                            data: [{x: currX, y: currY}],
+                            backgroundColor: '#ef4444',
+                            pointRadius: 6,
+                            order: 0
+                        },
+                        {
+                            label: 'Constant Product (Uniswap)',
+                            data: pointsUniswap,
+                            borderColor: '#d97706',
+                            borderWidth: 2,
+                            borderDash: [2, 2],
+                            showLine: true,
+                            pointRadius: 0,
+                            fill: false,
+                            order: 3,
+                            hidden: false
+                        },
+                        {
+                            label: 'Constant Sum (Linear)',
+                            data: pointsLinear,
+                            borderColor: '#16a34a',
+                            borderWidth: 2,
+                            borderDash: [10, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                            fill: false,
+                            order: 4,
+                            hidden: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest',
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'USGX Balance' }
+                        },
+                        y: {
+                            type: 'linear',
+                            title: { display: true, text: 'KRGX Balance' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 8
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': (' + context.parsed.x.toFixed(0) + ', ' + context.parsed.y.toFixed(0) + ')';
+                                }
+                            }
+                        }
+                    }
+                }
+             });
+        }
+    }
+
+    function applyTrade() {
+        document.getElementById('x').value = nextState.x;
+        document.getElementById('y').value = nextState.y;
+        updateSim();
+    }
+
+    function resetPool() {
+        document.getElementById('x').value = initialState.x;
+        document.getElementById('y').value = initialState.y;
+        updateSim();
+    }
+
+    window.onload = updateSim;
+</script>
+
+</body>
+</html>
