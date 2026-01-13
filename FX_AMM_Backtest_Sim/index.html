@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gurufin FX AMM Backtest Simulator</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Sidebar Controls -->
+        <div class="sidebar">
+            <h2>FX AMM Backtest</h2>
+            <p style="color:var(--text-light); font-size:13px;">Bank LP Simulation V1.0</p>
+            
+            <div class="section-title">Scenario Settings</div>
+            
+            <div class="input-group">
+                <label>Initial Investment (USD)</label>
+                <input type="number" id="initWealth" value="10000000">
+            </div>
+            
+            <div class="input-group">
+                <label>Daily Volume (as % of TVL)</label>
+                <select id="volScenario">
+                    <option value="0.01">Conservative (1%)</option>
+                    <option value="0.05" selected>Base (5%)</option>
+                    <option value="0.20">Aggressive (20%)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>FX Volatility (Annual %)</label>
+                <input type="number" id="fxVol" value="10" step="1">
+            </div>
+
+            <div class="section-title">Model Params</div>
+            
+            <div class="input-group">
+                <label>Gurufin A_max</label>
+                <input type="number" id="aMax" value="500">
+            </div>
+             <div class="input-group">
+                <label>Gurufin A_min</label>
+                <input type="number" id="aMin" value="10">
+            </div>
+
+            <button class="btn" onclick="runSimulation()">Run Simulation</button>
+            
+            <div class="section-title" style="margin-top:20px;">Results Summary</div>
+            <div id="resultsLog" class="log-console">
+                Ready to run...
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="main-content">
+            
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="metric-label">Gurufin LP Final Value</div>
+                    <div class="metric-value" id="valGurufin">--</div>
+                </div>
+                <div class="card">
+                    <div class="metric-label">Curve LP Final Value</div>
+                    <div class="metric-value" id="valCurve">--</div>
+                </div>
+                <div class="card">
+                    <div class="metric-label">Uniswap LP Final Value</div>
+                    <div class="metric-value" id="valUniswap">--</div>
+                </div>
+                <div class="card">
+                    <div class="metric-label">HODL Value</div>
+                    <div class="metric-value" id="valHodl">--</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="perfChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="ilChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/math_core.js"></script>
+    <script src="js/data_loader.js"></script>
+    
+    <script src="js/models/model_uniswap.js"></script>
+    <script src="js/models/model_curve.js"></script>
+    <script src="js/models/model_gurufin.js"></script>
+    
+    <script src="js/simulator_engine.js"></script>
+    <script src="js/chart_manager.js"></script>
+
+    <script>
+        // Init UI
+        ChartManager.init();
+
+        function runSimulation() {
+            const logDiv = document.getElementById('resultsLog');
+            logDiv.innerHTML = "Generating Data...<br>";
+
+            // Update Config from UI
+            Config.pool.initialWealthUSD = parseFloat(document.getElementById('initWealth').value);
+            Config.sim.dailyVolumePct = parseFloat(document.getElementById('volScenario').value);
+            Config.sim.volatility = parseFloat(document.getElementById('fxVol').value) / 100;
+            
+            Config.gurufin.aMax = parseFloat(document.getElementById('aMax').value);
+            Config.gurufin.aMin = parseFloat(document.getElementById('aMin').value);
+
+            // Generate Data
+            const data = DataLoader.generateGBM(
+                Config.sim.days, 
+                Config.sim.stepsPerDay, 
+                Config.sim.initialPrice, 
+                Config.sim.volatility, 
+                Config.sim.drift
+            );
+            
+            logDiv.innerHTML += `Data Generated: ${data.length} steps.<br>Running Backtest...<br>`;
+            
+            // Run Engine
+            setTimeout(() => {
+                const results = SimulatorEngine.run(data, Config);
+                
+                // Render Charts
+                ChartManager.renderPerformanceChart('perfChart', { stats: results.stats, data: results.data, config: Config });
+                ChartManager.renderILChart('ilChart', { stats: results.stats, data: results.data, config: Config });
+
+                // Update Stats
+                const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+                
+                const gStats = results.stats.find(s => s.name.includes("Gurufin"));
+                const cStats = results.stats.find(s => s.name.includes("Curve"));
+                const uStats = results.stats.find(s => s.name.includes("Uniswap"));
+                const lastIdx = gStats.history.length - 1;
+
+                document.getElementById('valGurufin').innerHTML = fmt.format(gStats.history[lastIdx].lpValue);
+                document.getElementById('valCurve').innerHTML = fmt.format(cStats.history[lastIdx].lpValue);
+                document.getElementById('valUniswap').innerHTML = fmt.format(uStats.history[lastIdx].lpValue);
+                document.getElementById('valHodl').innerHTML = fmt.format(gStats.history[lastIdx].hodlValue);
+                
+                logDiv.innerHTML += "Done.<br>";
+                logDiv.innerHTML += `Gurufin Halt Count: ${gStats.haltCount}`;
+            }, 100);
+        }
+        
+        // Run once on load
+        runSimulation();
+    </script>
+</body>
+</html>
