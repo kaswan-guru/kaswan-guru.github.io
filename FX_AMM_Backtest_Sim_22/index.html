@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gurufin FX AMM Backtest Simulator</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Sidebar Controls -->
+        <div class="sidebar">
+            <h2>FX AMM Backtest</h2>
+            <p style="color:var(--text-light); font-size:13px;">Bank LP Simulation V2.2</p>
+
+            <div class="section-title">Scenario Settings</div>
+
+            <div class="input-group">
+                <label>Data Source</label>
+                <select id="dataSource">
+                    <option value="gbm" selected>Random (GBM)</option>
+                    <option value="historical_2025">Historical (2025)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>Arb Efficiency</label>
+                <select id="arbStrategy">
+                    <option value="100">Efficient (Near 100%)</option>
+                    <option value="87" selected>Balanced (Current ~87%)</option>
+                    <option value="50">Passive (50% One-shot)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>Initial Investment (USD)</label>
+                <input type="number" id="initWealth" value="10000000">
+            </div>
+
+            <div class="input-group">
+                <label>Swap Fee (%)</label>
+                <input type="number" id="feeTier" value="0.05" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>Daily Volume (as % of TVL)</label>
+                <select id="volScenario">
+                    <option value="0.01">Conservative (1%)</option>
+                    <option value="0.05" selected>Base (5%)</option>
+                    <option value="0.20">Aggressive (20%)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>FX Volatility (Annual %)</label>
+                <input type="number" id="fxVol" value="10" step="1">
+            </div>
+
+            <div class="section-title">Model Params</div>
+
+            <!-- Model Selection for Slot 2 (Curve Family) -->
+            <div class="input-group">
+                <label>Curve Model Variant</label>
+                <select id="modelCurveSelect">
+                    <option value="curve_norm" selected>1. Curve (Existing - Normalized)</option>
+                    <option value="curve_stable">2. Curve (Stable - USDT/USDC)</option>
+                    <option value="curve_crypto">3. Curve (Crypto V2 - Lagging Peg)</option>
+                </select>
+            </div>
+
+            <!-- Model Selection for Slot 3 (Uniswap Family) -->
+            <div class="input-group">
+                <label>Uniswap Model Variant</label>
+                <select id="modelUniswapSelect">
+                    <option value="uniswap_v2" selected>1. Uniswap V2 (Existing)</option>
+                    <option value="uniswap_std">2. Uniswap V2 (Standard - No Recenter)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>Gurufin A_max</label>
+                <input type="number" id="aMax" value="500">
+            </div>
+             <div class="input-group">
+                <label>Gurufin A_min</label>
+                <input type="number" id="aMin" value="10">
+            </div>
+
+            <div class="input-group">
+                <label>Curve A (Fixed)</label>
+                <input type="number" id="curveAFixed" value="500">
+            </div>
+
+            <button class="btn" onclick="runSimulation()">Run Simulation</button>
+            
+            <div class="section-title" style="margin-top:20px;">Results Summary</div>
+            <div id="resultsLog" class="log-console">
+                Ready to run...
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="main-content">
+
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="metric-label">Gurufin LP Final Value</div>
+                    <div class="metric-value" id="valGurufin">--</div>
+                    <div class="metric-sub" id="feeGurufin" style="font-size: 14px; color: #16a34a; margin-top: 5px;">Fees: --</div>
+                    <label style="display:flex; align-items:center; gap:5px; font-weight:normal; margin-top: 8px;">
+                        <input type="checkbox" id="recenterGurufin">
+                        Ref-Price Recenter (Gurufin)
+                    </label>
+                </div>
+                <div class="card">
+                    <div class="metric-label">Curve LP Final Value</div>
+                    <div class="metric-value" id="valCurve">--</div>
+                    <div class="metric-sub" id="feeCurve" style="font-size: 14px; color: #16a34a; margin-top: 5px;">Fees: --</div>
+                    <label style="display:flex; align-items:center; gap:5px; font-weight:normal; margin-top: 8px;">
+                        <input type="checkbox" id="recenterCurve">
+                        Ref-Price Recenter (Curve)
+                    </label>
+                </div>
+                <div class="card">
+                    <div class="metric-label">Uniswap LP Final Value</div>
+                    <div class="metric-value" id="valUniswap">--</div>
+                    <div class="metric-sub" id="feeUniswap" style="font-size: 14px; color: #16a34a; margin-top: 5px;">Fees: --</div>
+                </div>
+                <div class="card">
+                    <div class="metric-label">HODL Value</div>
+                    <div class="metric-value" id="valHodl">--</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="perfChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="ilChart"></canvas>
+            </div>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn" onclick="togglePriceChart()" style="background-color: #64748b; width: auto; padding: 5px 15px;">Show/Hide Exchange Rate Chart</button>
+                <button class="btn" onclick="toggleCompositionChart()" style="background-color: #0f172a; width: auto; padding: 5px 15px;">Show Final Asset Composition</button>
+            </div>
+
+            <div class="chart-container" id="priceChartContainer" style="display:none; margin-top: 10px;">
+                <canvas id="priceChart"></canvas>
+            </div>
+
+            <div class="chart-container" id="compositionChartContainer" style="display:none; margin-top: 10px;">
+                <canvas id="compositionChart"></canvas>
+            </div>
+
+            <div class="chart-container" id="priceChartContainer" style="display:none; margin-top: 10px;">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/historical_data_2025.js"></script>
+    <script src="js/math_core.js"></script>
+    <script src="js/data_loader.js"></script>
+
+    <script src="js/models/model_uniswap.js"></script>
+    <script src="js/models/model_uniswap_standard.js"></script>
+    <script src="js/models/model_curve.js"></script>
+    <script src="js/models/model_curve_stable.js"></script>
+    <script src="js/models/model_curve_crypto_v2.js"></script>
+    <script src="js/models/model_gurufin.js"></script>
+
+    <script src="js/simulator_engine.js"></script>
+    <script src="js/chart_manager.js"></script>
+
+    <script>
+        // Init UI
+        ChartManager.init();
+
+        function togglePriceChart() {
+            const container = document.getElementById('priceChartContainer');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function toggleCompositionChart() {
+            const container = document.getElementById('compositionChartContainer');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function runSimulation() {
+            const logDiv = document.getElementById('resultsLog');
+            logDiv.innerHTML = "Generating Data...<br>";
+
+            // Update Config from UI
+            Config.pool.initialWealthUSD = parseFloat(document.getElementById('initWealth').value);
+            // Fee: UI is in %, Config is in decimal (0.05% -> 0.0005)
+            Config.pool.feeTier = parseFloat(document.getElementById('feeTier').value) / 100;
+            Config.sim.dailyVolumePct = parseFloat(document.getElementById('volScenario').value);
+            Config.sim.volatility = parseFloat(document.getElementById('fxVol').value) / 100;
+
+            // Recenter Options
+            Config.sim.recenterGurufin = document.getElementById('recenterGurufin').checked;
+            Config.sim.recenterCurve = document.getElementById('recenterCurve').checked;
+
+            Config.gurufin.aMax = parseFloat(document.getElementById('aMax').value);
+            Config.gurufin.aMin = parseFloat(document.getElementById('aMin').value);
+
+            // Add Curve Fixed A from UI
+            Config.curve.aFixed = parseFloat(document.getElementById('curveAFixed').value);
+
+            // Capture Model Selections
+            Config.sim.modelCurveType = document.getElementById('modelCurveSelect').value;
+            Config.sim.modelUniswapType = document.getElementById('modelUniswapSelect').value;
+
+            const dataSource = document.getElementById('dataSource').value;
+
+            // Arb Strategy
+            Config.sim.arbStrategy = document.getElementById('arbStrategy').value;
+
+            let data;
+
+            if (dataSource === 'historical_2025') {
+                 data = DataLoader.getHistoricalData();
+                 if (!data || data.length === 0) {
+                     logDiv.innerHTML += "Error: Historical data is empty or failed to load.<br>";
+                     return;
+                 }
+
+                 // Override initial price to match historical start and stepsPerDay
+                 if (data.length > 0) {
+                     Config.sim.initialPrice = data[0].price;
+                     Config.sim.stepsPerDay = 24;
+                     logDiv.innerHTML += `Initial Price set to: ${Config.sim.initialPrice.toFixed(2)}<br>`;
+                     logDiv.innerHTML += `Simulation Resolution set to Hourly (24 steps/day)<br>`;
+                 }
+
+                 const uniqueDays = new Set(data.map(d => d.day)).size;
+                 logDiv.innerHTML += `Using Historical Data (2025). Covered Days: ${uniqueDays}<br>`;
+            } else {
+                // Generate Data (GBM)
+                data = DataLoader.generateGBM(
+                    Config.sim.days,
+                    Config.sim.stepsPerDay,
+                    Config.sim.initialPrice,
+                    Config.sim.volatility,
+                    Config.sim.drift
+                );
+                logDiv.innerHTML += `Generated Random GBM Data.<br>`;
+            }
+
+            logDiv.innerHTML += `Data Steps: ${data.length}.<br>Running Backtest...<br>`;
+
+            // Run Engine
+            setTimeout(() => {
+                const results = SimulatorEngine.run(data, Config);
+
+                // Render Charts
+                ChartManager.renderPerformanceChart('perfChart', { stats: results.stats, data: results.data, config: Config });
+                ChartManager.renderILChart('ilChart', { stats: results.stats, data: results.data, config: Config });
+                ChartManager.renderPriceChart('priceChart', { stats: results.stats, data: results.data, config: Config });
+                ChartManager.renderCompositionChart('compositionChart', { stats: results.stats, data: results.data, config: Config });
+
+                // Update Stats
+                const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+                const gStats = results.stats.find(s => s.name.includes("Gurufin"));
+                const cStats = results.stats.find(s => s.name.includes("Curve"));
+                const uStats = results.stats.find(s => s.name.includes("Uniswap"));
+                const lastIdx = gStats.history.length - 1;
+
+                document.getElementById('valGurufin').innerHTML = fmt.format(gStats.history[lastIdx].lpValue);
+                document.getElementById('feeGurufin').innerHTML = `Fees: ${fmt.format(gStats.feesUSD)}`;
+
+                document.getElementById('valCurve').innerHTML = fmt.format(cStats.history[lastIdx].lpValue);
+                document.getElementById('feeCurve').innerHTML = `Fees: ${fmt.format(cStats.feesUSD)}`;
+
+                document.getElementById('valUniswap').innerHTML = fmt.format(uStats.history[lastIdx].lpValue);
+                document.getElementById('feeUniswap').innerHTML = `Fees: ${fmt.format(uStats.feesUSD)}`;
+
+                document.getElementById('valHodl').innerHTML = fmt.format(gStats.history[lastIdx].hodlValue);
+
+                logDiv.innerHTML += "Done.<br>";
+                logDiv.innerHTML += `Gurufin Halt Count: ${gStats.haltCount}`;
+            }, 100);
+        }
+
+        // Run once on load
+        runSimulation();
+    </script>
+</body>
+</html>
